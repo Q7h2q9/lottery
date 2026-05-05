@@ -1,0 +1,36 @@
+# 1-agent solo run: validates the whole pipeline end-to-end with one LLM call.
+# Useful to catch wiring bugs before paying for a 5-agent fleet.
+id: algo-two-sum-solo
+name: Two Sum (solo - 1 agent)
+description: |
+  Single-agent end-to-end smoke test. The agent solves a textbook Two Sum
+  problem and prints the answer in a fixed format. Mainly used to verify
+  multidraw + agentflow + pi + zimo relay all wire together.
+
+prompt: |
+  You are agent {{ draw_id }} ({{ model }}). Solve the problem below.
+
+  Problem:
+    Given nums = [2, 7, 11, 15] and target = 9, return the indices of the
+    two numbers (in ascending order) whose sum equals target.
+
+  Output rules (strict):
+    - Show your reasoning briefly if you must.
+    - On the last line, print exactly: ANSWER: [i, j]
+    - Replace i and j with the two indices, smallest first.
+
+default_success_criteria:
+  - kind: output_contains
+    value: "ANSWER:"
+
+cancel_policy: immediate
+concurrency: 1
+retries: 1
+retry_backoff_seconds: 3
+timeout_seconds: 90
+working_dir: .
+
+fleet:
+  - model: zimo/gpt-5.4
+    count: 1
+    tools: read_only

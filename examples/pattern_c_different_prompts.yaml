@@ -1,0 +1,44 @@
+# Pattern C — different fleet entries run TOTALLY different prompts.
+# Use when the angles are too different to fit one template — e.g. one
+# group should write code, another should reason analytically, another
+# should look up references.
+id: pattern-c-different-prompts
+name: Pattern C · per-fleet-entry prompt overrides
+
+# Project-level prompt acts as the default for any entry that doesn't
+# override it. Often written as the "primary" angle.
+prompt: |
+  You are agent {{ draw_id }}. Solve:
+
+    Find any integer n > 1 such that n divides 2^n - 2.
+
+  Approach freely. When done, print one line:
+    ANSWER: <integer>
+
+default_success_criteria:
+  - kind: output_contains
+    value: "ANSWER:"
+
+cancel_policy: immediate
+concurrency: 6
+retries: 1
+timeout_seconds: 90
+working_dir: .
+
+fleet:
+  # Entry 1: uses the project-level prompt above (analytic reasoners).
+  - model: zimo/gpt-5.4
+    count: 3
+    tools: read_only
+
+  # Entry 2: a totally different prompt — write & run code.
+  - model: zimo/gpt-5.4
+    count: 3
+    tools: read_write
+    prompt: |
+      You are agent {{ draw_id }}. Write a tiny Python script that
+      brute-forces n in [2, 1000] looking for n | (2^n - 2). Run it.
+      As soon as you have one valid n, print one line:
+        ANSWER: <integer>
+
+      No explanation, no other output.

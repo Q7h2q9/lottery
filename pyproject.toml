@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "multidraw"
+version = "0.2.0"
+description = "Race-to-finish multi-agent fleet framework, built on agentflow."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "multidraw" }]
+dependencies = [
+  "fastapi>=0.116.0",
+  "uvicorn>=0.35.0",
+  "pydantic>=2.11.0",
+  "jinja2>=3.1.6",
+  "typer>=0.16.0",
+  "rich>=13.7.0",
+  "httpx>=0.28.1",
+  "PyYAML>=6.0.2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4.0",
+  "pytest-asyncio>=1.1.0",
+]
+
+[project.scripts]
+multidraw = "multidraw.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["multidraw"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+# multidraw.models.Test is a pydantic BaseModel that happens to start with Test;
+# scope pytest collection to file-level pattern so it won't try to collect it.
+python_classes = ["TestCase", "Test_*"]

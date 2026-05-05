@@ -1,0 +1,196 @@
+{% extends "layout.html" %}
+{% block title %}{{ project.name }} · multidraw{% endblock %}
+{% block body %}
+<section class="container">
+  <header class="row split">
+    <div>
+      <h1>{{ project.name }}</h1>
+      <p class="muted small">
+        编号 <code>{{ project.id }}</code> ·
+        工作目录 <code>{{ project.working_dir }}</code> ·
+        {% if project.verbose_stream %}<span class="chip">verbose 全量流</span>{% else %}<span class="chip">默认精选流</span>{% endif %}
+      </p>
+    </div>
+    <div class="row">
+      <a class="btn" href="/">返回</a>
+      <button class="btn" data-action="edit-project" data-project="{{ project.id }}">编辑项目</button>
+      <button class="btn danger" data-action="delete-project" data-project="{{ project.id }}">删除项目</button>
+    </div>
+  </header>
+
+  <details class="block" open>
+    <summary>base_prompt（项目级任务描述）</summary>
+    <pre class="code">{{ project.base_prompt }}</pre>
+  </details>
+
+  <details class="block">
+    <summary>format_spec（撰写 agent 看到的格式要求）{% if not project.format_spec %} <span class="muted small">— 使用默认</span>{% endif %}</summary>
+    <pre class="code">{{ project.format_spec or default_format_spec }}</pre>
+  </details>
+
+  <details class="block">
+    <summary>成功条件</summary>
+    {% if project.default_success_criteria %}
+    <table class="grid">
+      <thead><tr><th>kind</th><th>value</th><th>path</th></tr></thead>
+      <tbody>
+      {% for c in project.default_success_criteria %}
+        <tr><td><code>{{ c.kind }}</code></td><td>{{ c.value or '' }}</td><td>{{ c.path or '' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">（无）</p>{% endif %}
+  </details>
+
+  <header class="row split" style="margin-top:24px;">
+    <h2>测试</h2>
+    <button class="btn primary" data-action="new-test" data-project="{{ project.id }}">新建测试</button>
+  </header>
+
+  {% if tests %}
+  <ul class="cards">
+    {% for test in tests %}
+    <li class="card">
+      <a class="card-link" href="/projects/{{ project.id }}/tests/{{ test.id }}">
+        <header class="row split">
+          <h3>{{ test.name }}</h3>
+          {% if test.approval_status == 'approved' %}
+            <span class="chip state state-completed">已批准</span>
+          {% else %}
+            <span class="chip state state-pending">草稿</span>
+          {% endif %}
+        </header>
+        <p class="muted small">{{ test.description or '' }}</p>
+        <dl class="meta">
+          <dt>agent</dt>
+          <dd><strong>{{ test.agent_count }}</strong> × <code>{{ test.model }}</code></dd>
+          <dt>工具</dt>
+          <dd><code>{{ test.tools }}</code></dd>
+          <dt>取消</dt>
+          <dd>{{ test.cancel_policy.value }}</dd>
+        </dl>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">还没创建测试。点「新建测试」开始。</p>
+  {% endif %}
+</section>
+
+<dialog id="new-test-dialog" data-project="{{ project.id }}">
+  <form id="new-test-form">
+    <h2>新建测试</h2>
+    <p class="muted">
+      测试是项目下的一个具体配置：跑几个 agent、每个 agent 给什么 hint。
+      创建后到测试详情页点「生成 prompt」让撰写 agent 出 prompt，确认无误后再开始抽卡。
+    </p>
+    <label class="field">
+      <span>测试名 <em>*</em></span>
+      <input name="name" required autocomplete="off" placeholder="例：十种策略 · 10 agent" />
+    </label>
+    <label class="field">
+      <span>描述（可选）</span>
+      <input name="description" autocomplete="off" />
+    </label>
+    <label class="field">
+      <span>题目 / 任务描述（test_prompt，所有 agent 共享）</span>
+      <textarea name="test_prompt" rows="8" spellcheck="false"
+        placeholder="写具体的题目或任务描述。例如算法题的完整题面、bug 描述等。&#10;创建后也可以在测试详情页修改。"></textarea>
+    </label>
+    <div class="row" style="gap:12px;">
+      <label class="field" style="flex:1;">
+        <span>agent 数量 <em>*</em></span>
+        <input name="agent_count" type="number" min="1" max="200" value="5" required />
+      </label>
+      <label class="field" style="flex:2;">
+        <span>选手 agent 模型</span>
+        <input name="model" autocomplete="off" value="zimo/gpt-5.4" />
+      </label>
+      <label class="field" style="flex:1;">
+        <span>工具权限</span>
+        <select name="tools">
+          <option value="read_only">read_only</option>
+          <option value="read_write">read_write</option>
+        </select>
+      </label>
+    </div>
+    <details>
+      <summary>高级 · 取消策略 / 并发 / 重试 / 超时 / 手动模式</summary>
+      <div class="row" style="gap:12px;">
+        <label class="field" style="flex:1;">
+          <span>cancel_policy</span>
+          <select name="cancel_policy">
+            <option value="immediate" selected>immediate</option>
+            <option value="delay">delay</option>
+            <option value="none">none</option>
+          </select>
+        </label>
+        <label class="field" style="flex:1;">
+          <span>cancel_delay_seconds</span>
+          <input name="cancel_delay_seconds" type="number" value="0" min="0" />
+        </label>
+        <label class="field" style="flex:1;">
+          <span>concurrency</span>
+          <input name="concurrency" type="number" value="20" min="1" max="200" />
+        </label>
+      </div>
+      <div class="row" style="gap:12px;">
+        <label class="field" style="flex:1;">
+          <span>retries</span>
+          <input name="retries" type="number" value="1" min="0" max="10" />
+        </label>
+        <label class="field" style="flex:1;">
+          <span>timeout_seconds</span>
+          <input name="timeout_seconds" type="number" value="600" min="10" />
+        </label>
+        <label class="field row" style="flex:1; align-items:center; gap:8px;">
+          <input type="checkbox" name="manual_mode" />
+          <span>manual_mode（绕过撰写 agent，全手写 prompt）</span>
+        </label>
+      </div>
+    </details>
+    <div class="row split">
+      <button type="button" class="btn" data-close>取消</button>
+      <button type="submit" class="btn primary">创建</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="edit-project-dialog" data-project="{{ project.id }}">
+  <form id="edit-project-form">
+    <h2>编辑项目</h2>
+    <label class="field">
+      <span>名称</span>
+      <input name="name" value="{{ project.name }}" required />
+    </label>
+    <label class="field">
+      <span>描述</span>
+      <input name="description" value="{{ project.description or '' }}" />
+    </label>
+    <label class="field">
+      <span>base_prompt</span>
+      <textarea name="base_prompt" rows="10" required>{{ project.base_prompt }}</textarea>
+    </label>
+    <details {% if project.format_spec %}open{% endif %}>
+      <summary>format_spec / 其他</summary>
+      <label class="field">
+        <span>format_spec（留空走默认）</span>
+        <textarea name="format_spec" rows="6" placeholder="（默认）">{{ project.format_spec or '' }}</textarea>
+      </label>
+      <label class="field">
+        <span>working_dir</span>
+        <input name="working_dir" value="{{ project.working_dir }}" />
+      </label>
+      <label class="field row" style="gap:8px;">
+        <input type="checkbox" name="verbose_stream" {% if project.verbose_stream %}checked{% endif %} />
+        <span>verbose_stream</span>
+      </label>
+    </details>
+    <div class="row split">
+      <button type="button" class="btn" data-close>取消</button>
+      <button type="submit" class="btn primary">保存</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}

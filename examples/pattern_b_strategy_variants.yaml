@@ -1,0 +1,38 @@
+# Pattern B — same template, per-agent variables for diversity.
+# Use when you want every agent to attack the same problem from a slightly
+# different angle (different strategy, seed, hint, file slice, etc.).
+id: pattern-b-strategy-variants
+name: Pattern B · same prompt template + per-agent variables
+
+prompt: |
+  You are agent {{ draw_id }}. Find the longest palindromic substring of:
+
+    "babadeedabbaabaabba"
+
+  {% if strategy %}Strategy you must try first: {{ strategy }}.{% endif %}
+
+  When done, print one line:
+    ANSWER: <substring>
+
+default_success_criteria:
+  - kind: output_contains
+    value: "ANSWER:"
+
+cancel_policy: immediate
+concurrency: 5
+retries: 1
+timeout_seconds: 60
+working_dir: .
+
+fleet:
+  - model: zimo/gpt-5.4
+    count: 5
+    tools: read_only
+    # `variables` is a list → one dict per agent (index 0..count-1).
+    # Each agent's prompt has a different {{ strategy }} substitution.
+    variables:
+      - { strategy: "expand-around-center" }
+      - { strategy: "dynamic programming O(n^2)" }
+      - { strategy: "Manacher's algorithm" }
+      - { strategy: "brute force, then verify" }
+      - { strategy: "suffix array + LCP" }

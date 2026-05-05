@@ -1,0 +1,134 @@
+{% extends "layout.html" %}
+{% block title %}{{ test.name }} · {{ project.name }} · multidraw{% endblock %}
+{% block body %}
+{% set STATE_LABELS = {'queued': '排队中', 'running': '运行中', 'won': '胜出', 'exhausted': '全部结束', 'cancelled': '已取消', 'failed': '失败'} %}
+<section class="container test-page"
+  data-project-id="{{ project.id }}"
+  data-test-id="{{ test.id }}"
+  data-agent-count="{{ test.agent_count }}"
+  data-manual-mode="{% if test.manual_mode %}1{% endif %}">
+
+  <header class="row split">
+    <div>
+      <h1>{{ test.name }}</h1>
+      <p class="muted small">
+        <a href="/projects/{{ project.id }}">{{ project.name }}</a> /
+        <code>{{ test.id }}</code> ·
+        <strong>{{ test.agent_count }}</strong> × <code>{{ test.model }}</code> ·
+        工具 <code>{{ test.tools }}</code> ·
+        取消 <code>{{ test.cancel_policy.value }}</code>{% if test.cancel_policy.value == 'delay' %} {{ test.cancel_delay_seconds }}s{% endif %}
+      </p>
+    </div>
+    <div class="row">
+      <a class="btn" href="/projects/{{ project.id }}">返回项目</a>
+      <button class="btn danger" data-action="delete-test"
+        data-project="{{ project.id }}" data-test="{{ test.id }}">删除测试</button>
+    </div>
+  </header>
+
+  {% if test.approval_status == 'approved' %}
+    {% if drifted %}
+    <div class="banner warn">
+      <strong>⚠ 配置已变更</strong> ——
+      上次批准是基于旧配置；当前 per_agent_overrides 或 agent_count / model 已变。
+      抽卡仍可发起（用旧 prompts），但建议「重新生成」+「重新批准」。
+    </div>
+    {% else %}
+    <div class="banner ok">
+      <strong>✓ 已批准</strong> ——
+      {{ test.last_approved_at }} 批准。可以「开始抽卡」。
+    </div>
+    {% endif %}
+  {% else %}
+    {% if test.resolved_prompts %}
+    <div class="banner muted">
+      <strong>草稿</strong> —— 已生成 {{ test.resolved_prompts | length }} 条 prompt（{{ test.last_synthesized_at }}），尚未批准。
+    </div>
+    {% else %}
+    <div class="banner muted">
+      <strong>草稿</strong> —— 还没生成 prompt。
+      {% if test.manual_mode %}手动模式：直接编辑下面每个 agent 的 prompt。
+      {% else %}填好 hint 后点「生成 prompt」让撰写 agent 跑一发。{% endif %}
+    </div>
+    {% endif %}
+  {% endif %}
+
+  <h2>测试题目 / 任务描述（所有 agent 共享）</h2>
+  <p class="muted small">
+    这里写本测试的具体题目（如算法题题面、bug 描述等）。所有 agent 都会看到这段内容。
+    撰写 agent 会把「项目通用指引 + 这段题目 + 每个 agent 的 hint」三层综合成最终 prompt。
+  </p>
+  <textarea id="test-prompt-input" rows="10" class="test-prompt-textarea" spellcheck="false"
+    placeholder="例：给定一个 n × n 的二维矩阵 matrix 表示一个图像。请你将图像顺时针旋转 90 度…">{{ test.test_prompt | default('', true) }}</textarea>
+  <button class="btn" data-action="save-test-prompt" style="margin-top:8px;">保存题目</button>
+
+  <h2>每个 agent 的个性化 + 最终 prompt</h2>
+  <p class="muted small">
+    每张卡片对应一个 agent。<code>hint</code> 是给撰写 agent 看的策略提示；
+    <code>prompt_override</code> 直接覆盖该 agent 的最终 prompt（撰写 agent 不再处理它）。
+    <code>final_prompt</code> 是即将下发给选手 agent 的完整 prompt——你可以审完手动改。
+  </p>
+
+  <div class="agent-edit-grid" id="agent-edit-grid">
+    {% for agent in agents %}
+    <article class="agent-edit-card" data-index="{{ agent.index }}" data-agent-id="{{ agent.id }}">
+      <header class="row split">
+        <strong>{{ agent.id }}</strong>
+        <span class="muted small">#{{ agent.index }}</span>
+      </header>
+      <label class="field">
+        <span>hint（个性化提示，撰写 agent 综合）</span>
+        <input class="hint-input" type="text" placeholder="例：分治法 / 转置后逆序 / 走数学映射"
+          value="{{ (test.per_agent_overrides[agent.index].hint if agent.index < test.per_agent_overrides | length else '') | default('', true) }}" />
+      </label>
+      <label class="field">
+        <span>prompt_override（直接覆盖；非空时撰写 agent 跳过此 agent）</span>
+        <textarea class="override-input" rows="3" placeholder="（一般留空，让撰写 agent 处理）">{{ (test.per_agent_overrides[agent.index].prompt_override if agent.index < test.per_agent_overrides | length else '') | default('', true) }}</textarea>
+      </label>
+      <label class="field">
+        <span>final_prompt（撰写 agent 输出 / 手动模式编辑）</span>
+        <textarea class="prompt-input" rows="6" spellcheck="false">{{ (agent.prompt if test.resolved_prompts else '') | default('', true) }}</textarea>
+      </label>
+    </article>
+    {% endfor %}
+  </div>
+
+  <div class="row" style="gap:8px; margin-top:16px;">
+    <button class="btn" data-action="save-overrides">保存 hint / override</button>
+    {% if not test.manual_mode %}
+    <button class="btn primary" data-action="synthesize">{% if test.resolved_prompts %}重新{% endif %}生成 prompt</button>
+    {% endif %}
+    <button class="btn" data-action="save-prompts">保存手写 prompt</button>
+    {% if test.approval_status == 'approved' %}
+    <button class="btn" data-action="revoke">撤销批准</button>
+    {% else %}
+    <button class="btn primary" data-action="approve">批准（允许抽卡）</button>
+    {% endif %}
+    <span class="grow"></span>
+    <button class="btn primary" data-action="start-draw"
+      {% if not test.is_runnable() %}disabled title="需要先批准"{% endif %}>开始抽卡</button>
+  </div>
+
+  <h2>抽卡历史</h2>
+  {% if draws %}
+  <ul class="cards">
+    {% for draw in draws %}
+    <li class="card draw-card draw-state-{{ draw.state.value }}">
+      <a class="card-link" href="/draws/{{ draw.draw_id }}">
+        <header class="row split">
+          <strong>{{ draw.draw_id }}</strong>
+          <span class="chip state state-{{ draw.state.value }}">{{ STATE_LABELS.get(draw.state.value, draw.state.value) }}</span>
+        </header>
+        <p class="muted small">{{ draw.started_at }}</p>
+        {% if draw.winner_node_id %}
+        <p>胜者：<code>{{ draw.winner_node_id }}</code></p>
+        {% endif %}
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">还没抽过卡。批准后点「开始抽卡」。</p>
+  {% endif %}
+</section>
+{% endblock %}

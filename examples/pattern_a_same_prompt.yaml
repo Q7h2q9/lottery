@@ -1,0 +1,31 @@
+# Pattern A — every agent runs the IDENTICAL prompt.
+# Use when you just want raw parallelism: same task, N independent attempts,
+# diversity comes purely from LLM sampling noise.
+id: pattern-a-same-prompt
+name: Pattern A · all agents share one prompt
+
+prompt: |
+  You are agent {{ draw_id }}. Solve this:
+
+    Compute fibonacci(30) and print the value.
+
+  When done, print exactly one line:
+    ANSWER: <number>
+
+default_success_criteria:
+  - kind: output_contains
+    value: "ANSWER:"
+
+cancel_policy: immediate
+concurrency: 5
+retries: 1
+timeout_seconds: 60
+working_dir: .
+
+fleet:
+  - model: zimo/gpt-5.4
+    count: 5
+    tools: read_only
+    # No `variables`, no per-entry `prompt` override → all 5 agents see
+    # the exact same rendered prompt (the only thing that varies is
+    # {{ draw_id }} — the unique node id, used for traceability).

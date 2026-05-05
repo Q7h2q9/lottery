@@ -1,0 +1,59 @@
+{% extends "layout.html" %}
+{% block title %}抽卡 {{ draw.draw_id }} · multidraw{% endblock %}
+{% block body %}
+{% set STATE_LABELS = {'queued': '排队中', 'running': '运行中', 'won': '胜出', 'exhausted': '全部结束', 'cancelled': '已取消', 'failed': '失败', 'pending': '待启动'} %}
+<section class="container draw-page"
+  data-draw-id="{{ draw.draw_id }}"
+  data-project-id="{{ project.id }}"
+  data-test-id="{{ test.id }}">
+
+  <header class="row split">
+    <div>
+      <h1>{{ project.name }} / {{ test.name }}</h1>
+      <p class="muted small">
+        抽卡 <code>{{ draw.draw_id }}</code>
+        · 运行 <code>{{ draw.run_id }}</code>
+        · agent 总数 <strong>{{ draw.total_agents }}</strong>
+        · <a href="/projects/{{ project.id }}/tests/{{ test.id }}">返回测试</a>
+      </p>
+    </div>
+    <div class="row">
+      <span id="draw-state" class="chip state state-{{ draw.state.value }}">{{ STATE_LABELS.get(draw.state.value, draw.state.value) }}</span>
+      <button class="btn danger" data-action="cancel-draw" data-draw="{{ draw.draw_id }}">取消抽卡</button>
+    </div>
+  </header>
+
+  <div id="winner-banner" class="banner hidden">
+    <strong>胜者：</strong><code id="winner-id"></code>
+    <details>
+      <summary>完整输出</summary>
+      <pre id="winner-payload"></pre>
+    </details>
+  </div>
+
+  <div class="grid-cards" id="agent-grid">
+    {% for agent in agents %}
+    <article class="agent-card state-pending" data-node="{{ agent.id }}" data-index="{{ agent.index }}">
+      <header class="row split">
+        <strong title="{{ agent.id }}">{{ agent.id }}</strong>
+        <span class="chip state state-pending">待启动</span>
+      </header>
+      <p class="muted small">{{ agent.model }}</p>
+      <p class="preview muted small"></p>
+      <button class="btn small expand-btn" data-action="open-agent-panel">查看对话</button>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
+<aside id="agent-panel" class="agent-panel hidden">
+  <header class="row split">
+    <div>
+      <strong id="agent-panel-title">agent</strong>
+      <span id="agent-panel-state" class="chip muted small"></span>
+    </div>
+    <button class="btn" data-action="close-agent-panel">关闭</button>
+  </header>
+  <div id="agent-panel-events" class="events"></div>
+</aside>
+{% endblock %}

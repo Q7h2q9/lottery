@@ -1,0 +1,51 @@
+# picoCTF-style demo: 50 codex + 5 opus race to find the flag.
+id: ctf-pico-web1
+name: picoCTF demo - admin login bypass
+description: |
+  Race a heterogeneous fleet (50 GPT-5-codex + 5 Claude Opus 4.7) against a
+  single CTF challenge. The first agent whose stdout contains `flag{` wins
+  and the orchestrator cancels every other agent immediately.
+
+prompt: |
+  You are agent {{ draw_id }} ({{ model }}), one of {{ count }} sibling
+  agents racing to crack the same CTF challenge. Time spent waiting for
+  others is wasted — work fast and be willing to take low-probability shots.
+
+  Challenge: a login page at http://target.local/admin accepts a username
+  and password. Other shards have already confirmed the username `admin`
+  works; the password is unknown. We have a wordlist `wordlist.txt` in the
+  working directory and the target accepts ~10 attempts/sec without
+  rate-limiting.
+
+  {% if strategy %}
+  Your assigned exploration strategy: {{ strategy }}
+  {% endif %}
+
+  Output rules (strict): when you have the flag, print exactly one line:
+      flag{<the-flag-content>}
+  Anything else is preamble.
+
+default_success_criteria:
+  - kind: output_regex
+    value: "flag\\{[^}]+\\}"
+
+cancel_policy: immediate
+concurrency: 25
+retries: 2
+retry_backoff_seconds: 5
+timeout_seconds: 1800
+working_dir: ./challenges/pico-web1
+
+fleet:
+  - model: openai/gpt-5-codex
+    count: 50
+    tools: read_write
+  - model: anthropic/claude-opus-4-7:high
+    count: 5
+    tools: read_write
+    variables:
+      - { strategy: "leaked-credential dumps" }
+      - { strategy: "default-password permutations" }
+      - { strategy: "hash-cracking with rockyou subset" }
+      - { strategy: "social-engineering wordlist (admin's GitHub bio)" }
+      - { strategy: "rule-based mutation of known passwords" }

@@ -1,0 +1,77 @@
+# LeetCode 48 · 矩阵顺时针旋转 90 度（原地）
+# 10 个 agent 用 5 种思路 ×2 副本并发跑。每个 agent 必须真跑 assert 两个用例
+# 才能输出 TESTS_PASS——靠 Python 解释器判对错，不是 LLM 嘴说。
+#
+# 用法：
+#   multidraw save examples/lc48_rotate_image.yaml
+#   mkdir -p challenges/lc48                  # working_dir，agent 在这里写 solve_*.py
+#   multidraw run lc48-rotate-image           # 阻塞跑到结束
+#
+# 想省钱：把 count 和 concurrency 从 10 改成 5。
+
+id: lc48-rotate-image
+name: LeetCode 48 矩阵顺时针旋转 90 度
+description: 10 个 agent 各试不同实现思路，第一个跑通两个用例的赢。
+
+prompt: |
+  你是编号 {{ draw_id }} 的 agent。在工作目录写一个 Python 脚本 solve_{{ draw_id }}.py，
+  实现函数：
+
+      def rotate(matrix: list[list[int]]) -> None:
+          """原地把 n×n 矩阵顺时针旋转 90 度。不允许另开矩阵。"""
+
+  约束：
+    - n == len(matrix) == len(matrix[i])
+    - 1 <= n <= 20
+    - -1000 <= matrix[i][j] <= 1000
+    - 必须**原地**修改 matrix，禁止 return 或 reassign 整个 matrix
+
+  {% if strategy %}你被分配的实现思路是：**{{ strategy }}**。优先用这条路。{% endif %}
+
+  写完后，**你必须自己跑代码验证两个用例**：
+
+      用例 1: [[1,2,3],[4,5,6],[7,8,9]]            → [[7,4,1],[8,5,2],[9,6,3]]
+      用例 2: [[5,1,9,11],[2,4,8,10],[13,3,6,7],[15,14,12,16]]
+              → [[15,13,2,5],[14,3,4,1],[12,6,8,9],[16,7,10,11]]
+
+  跑法（你必须真在 shell 里执行）：
+      python -c "
+      from solve_{{ draw_id }} import rotate
+      m1=[[1,2,3],[4,5,6],[7,8,9]]; rotate(m1)
+      assert m1==[[7,4,1],[8,5,2],[9,6,3]], m1
+      m2=[[5,1,9,11],[2,4,8,10],[13,3,6,7],[15,14,12,16]]; rotate(m2)
+      assert m2==[[15,13,2,5],[14,3,4,1],[12,6,8,9],[16,7,10,11]], m2
+      print('TESTS_PASS')
+      "
+
+  **只有当 stdout 里真的看到 TESTS_PASS** 时，你才在最后一行打印：
+      TESTS_PASS
+
+  否则就说哪个用例失败了。不要伪造 TESTS_PASS。
+
+default_success_criteria:
+  - kind: output_contains
+    value: "TESTS_PASS"
+
+cancel_policy: immediate
+concurrency: 10
+retries: 1
+retry_backoff_seconds: 3
+timeout_seconds: 300
+working_dir: ./challenges/lc48
+
+fleet:
+  - model: zimo/gpt-5.4
+    count: 10
+    tools: read_write
+    variables:
+      - { strategy: "先转置再每行 reverse" }
+      - { strategy: "四点循环：每次同时移动 4 个角点" }
+      - { strategy: "分层旋转：从外到内每层处理" }
+      - { strategy: "数学映射：(i,j) -> (j, n-1-i)" }
+      - { strategy: "先每行 reverse 再转置（错的方向，反过来想）" }
+      - { strategy: "先转置再每行 reverse" }
+      - { strategy: "四点循环：每次同时移动 4 个角点" }
+      - { strategy: "分层旋转：从外到内每层处理" }
+      - { strategy: "数学映射：(i,j) -> (j, n-1-i)" }
+      - { strategy: "纯位运算/索引推导，不调任何标准库" }

@@ -1,0 +1,59 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# --- Virtual envs ---
+.venv/
+venv/
+env/
+
+# --- Build / dist ---
+build/
+dist/
+*.whl
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+*~
+.claude/
+
+# --- Secrets — NEVER commit these ---
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# --- multidraw runtime / persisted state ---
+# project + test + draw store (runtime data, not source)
+.multidraw/
+.multidraw.v1.bak/
+# agentflow run artifacts
+.agentflow/
+
+# --- agent working dir (output of fleet runs) ---
+challenges/
+
+# --- temp / debug dumps ---
+/tmp/multidraw_synth_last.log
+*.log
+!docs/**/*.log
+
+# --- agentflow source clone (if any) ---
+.deps/

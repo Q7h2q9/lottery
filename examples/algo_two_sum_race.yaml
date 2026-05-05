@@ -1,0 +1,38 @@
+# 5-agent race: same task, multiple parallel attempts, first to finish wins.
+# Demonstrates multidraw's core "race-to-finish" semantics — useful when LLM
+# output is noisy and you want to amortise unreliability with parallelism.
+id: algo-two-sum-race
+name: Two Sum (race - 5 agents)
+description: |
+  Five gpt-5.4 agents race to solve the same Two Sum problem. The first to
+  emit `ANSWER:` wins; the racer immediately cancels the other four. Watch
+  the live grid at /draws/<id> to see which one lands first.
+
+prompt: |
+  You are agent {{ draw_id }} ({{ model }}), one of {{ count }} parallel
+  workers racing to be the first to print the right answer.
+
+  Problem:
+    Given nums = [2, 7, 11, 15] and target = 9, return the indices of the
+    two numbers (in ascending order) whose sum equals target.
+
+  Output rules (strict):
+    - Be fast. Skip preamble.
+    - On the last line, print exactly: ANSWER: [i, j]
+    - Smallest index first.
+
+default_success_criteria:
+  - kind: output_contains
+    value: "ANSWER:"
+
+cancel_policy: immediate
+concurrency: 5
+retries: 1
+retry_backoff_seconds: 3
+timeout_seconds: 90
+working_dir: .
+
+fleet:
+  - model: zimo/gpt-5.4
+    count: 5
+    tools: read_only

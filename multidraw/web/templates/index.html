@@ -1,0 +1,80 @@
+{% extends "layout.html" %}
+{% block title %}项目 · multidraw{% endblock %}
+{% block body %}
+<section class="container">
+  <header class="row split">
+    <h1>项目</h1>
+    <button class="btn primary" data-action="new-project">新建项目</button>
+  </header>
+
+  {% if projects %}
+  <ul class="cards project-list">
+    {% for project in projects %}
+    <li class="card">
+      <a class="card-link" href="/projects/{{ project.id }}">
+        <h3>{{ project.name }}</h3>
+        <p class="muted">{{ project.description or '（无描述）' }}</p>
+        <dl class="meta">
+          <dt>编号</dt>
+          <dd><code>{{ project.id }}</code></dd>
+          <dt>工作目录</dt>
+          <dd><code>{{ project.working_dir }}</code></dd>
+          <dt>详细流</dt>
+          <dd>{% if project.verbose_stream %}<span class="chip">verbose 全量</span>{% else %}<span class="chip">默认精选</span>{% endif %}</dd>
+        </dl>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">还没有项目。点击「新建项目」开始。</p>
+  {% endif %}
+</section>
+
+<dialog id="new-project-dialog">
+  <form id="new-project-form">
+    <h2>新建项目</h2>
+    <p class="muted">
+      项目是可重复利用的容器，写一份自然语言任务描述（base_prompt）。<br>
+      下面创建测试时，撰写 agent 会综合它和你给每个 agent 的个性化 hint 生成最终 prompt。
+    </p>
+
+    <label class="field">
+      <span>项目名 <em>*</em></span>
+      <input name="name" required autocomplete="off" placeholder="例：LeetCode 48 矩阵旋转" />
+    </label>
+
+    <label class="field">
+      <span>描述（可选）</span>
+      <input name="description" autocomplete="off" placeholder="一两句话简介" />
+    </label>
+
+    <label class="field">
+      <span>base_prompt（任务描述，自然语言）<em>*</em></span>
+      <textarea name="base_prompt" rows="10" required spellcheck="false"
+        placeholder="写清楚：要解决什么问题、约束条件、输入输出格式、自验要求…&#10;不需要 jinja 语法。撰写 agent 会按格式要求加工成给每个 agent 的最终 prompt。"></textarea>
+    </label>
+
+    <details>
+      <summary>高级 · 自定义格式要求 / 工作目录 / verbose</summary>
+      <label class="field">
+        <span>format_spec（覆盖默认格式要求；留空使用内置默认）</span>
+        <textarea name="format_spec" rows="6" spellcheck="false" placeholder="留空则用：&#10;{{ default_format_spec[:160] }}…"></textarea>
+      </label>
+      <label class="field">
+        <span>working_dir（agent 执行目录）</span>
+        <input name="working_dir" autocomplete="off" value="." />
+      </label>
+      <label class="field row" style="gap:8px;">
+        <input type="checkbox" name="verbose_stream" />
+        <span>verbose_stream — 转发 thinking / 全部 pi 事件到前端流（默认仅精选）</span>
+      </label>
+    </details>
+
+    <div class="row split">
+      <button type="button" class="btn" data-close>取消</button>
+      <button type="submit" class="btn primary">保存</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
