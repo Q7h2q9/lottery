@@ -1,199 +1,206 @@
 # multidraw
 
-> *"Race a fleet of agents at one task. First one to finish wins. Stop the rest."*
+> *"一群 agent 同时跑同一道题，谁先做出来谁赢，其他立刻停。"*
 
-A thin race-to-finish layer on top of [agentflow](https://github.com/berabuddies/agentflow).
-Built for unstable / probabilistic tasks where you'd rather throw 50 attempts at
-the wall than wait for one to slowly fail — algorithm problems, codegen,
-bug repros, research queries (CTF was the original prompt but the
-framework is task-agnostic).
+一个搭在 [agentflow](https://github.com/berabuddies/agentflow) 上的薄层，
+专门用来跑那种"单次成功率不高、想并发拉一把"的任务——算法题、codegen、bug 复现、
+研究类问题、CTF 等等。
 
-## How it works
+中文里叫"AI 抽卡"——同时召唤一队 agent 抢答，第一个达成完成条件的胜出。
+
+---
+
+## 工作原理
 
 ```
-Project (one task, fleet spec, win condition)
-   │
-   ├── compile  ──→  agentflow PipelineSpec (N independent pi nodes)
-   │
-   ├── submit   ──→  agentflow Orchestrator runs the fleet
-   │
-   └── race     ──→  watcher subscribes to SSE; on first node_completed
-                     with success=True, calls orchestrator.cancel(run_id)
-                     according to the project's cancel_policy
+项目 (Project) — 任务的可重复利用容器
+   ↓ 包含
+测试 (Test)    — 一种具体跑法（多少 agent、什么题目、每个 agent 给什么 hint）
+   ↓ 包含
+抽卡 (Draw)    — 一次执行（撰写 agent 综合 → 用户审批 → 真的跑起来）
 ```
 
-You bring **one prompt template**, a **fleet** of model copies, and a
-**success criterion**. multidraw expands every fleet entry into independent
-agentflow nodes (each with its own pre-rendered prompt and own model), submits
-them, and stops the run as soon as one wins.
+每次抽卡的关键流程：
 
-| concept | maps to |
+```
+撰写 agent 把三层信息综合：
+  ├─ 项目通用指引（base_prompt）
+  ├─ 本测试的具体题目（test_prompt）
+  └─ 每个 agent 的 hint（per_agent_overrides）
+        ↓
+   生成 N 条最终 prompt（每条自包含完整任务描述）
+        ↓
+   用户审批 → 通过后真的跑
+        ↓
+   compile to agentflow → 提交 → 外层 racer 监听 SSE
+        ↓
+   第一个 node_completed && success=True
+        ↓
+   orchestrator.cancel(run_id) 砍掉其他还在跑的 agent
+```
+
+---
+
+## 关键概念
+
+| 概念 | 是什么 |
 |---|---|
-| project | reusable goal (prompt, fleet, win condition) — lives in `.multidraw/projects/<id>/spec.json` |
-| draw | one execution attempt — wraps an agentflow run |
-| agent | one node in the agentflow run (one model copy) |
-| winner | the first agent whose `success_criteria` passes |
+| 项目 (Project) | 一个可重复利用的"题库容器"，写自然语言通用指引，下面挂多个测试 |
+| 测试 (Test) | 项目下的一种具体跑法，含具体题目 + agent 数量 + 每个 agent 的策略 hint |
+| 撰写 agent | 一个独立 LLM（pi/zimo gpt-5.4），帮你把三层信息合成最终 prompt |
+| 抽卡 (Draw) | 一次执行，跑出来 N 个 agent 抢答 |
+| 选手 agent | 抢答的 N 个 agent，每个都是独立 pi 节点 |
+| 胜者 (Winner) | 第一个满足 success_criteria 的 agent，其他立即被取消 |
 
-## Install
+---
+
+## 5 分钟跑起来
+
+详见 [`QUICKSTART.md`](QUICKSTART.md)。Windows 用户：双击 `install.bat` → 编辑 `.env` → 双击 `start.bat`。
 
 ```bash
-./install.sh         # creates .venv, clones agentflow into .deps/, pip installs both
+# Linux / macOS
+git clone https://github.com/Q7h2q9/lottery.git multidraw
+cd multidraw
+bash install.sh
+cp .env.example .env  # 编辑填入 ZIMO_API_KEY
 source .venv/bin/activate
-multidraw --help
+multidraw serve       # 浏览器开 http://127.0.0.1:8765
 ```
 
-Then **configure pi** (the LLM gateway every agent talks through):
+---
 
+## 用法（Web UI 主路径）
+
+1. **新建项目**
+   - 写 `base_prompt`：自然语言描述这一类任务的通用指引
+   - 例：「你是做算法题的 agent，需要用 C 语言解，完成后输出 `ANSWER: <答案>`」
+
+2. **项目下新建测试**
+   - 设 agent 数量（5、10、50…）
+   - 填 `test_prompt`：本次具体的题目描述（粘贴 LeetCode 题面之类）
+   - 可选：给每个 agent 不同的 hint
+     ```
+     agent 0: "用动态规划"
+     agent 1: "用双指针"
+     agent 2: "暴力枚举试试"
+     ```
+
+3. **生成 prompt**
+   - 点「生成 prompt」→ 撰写 agent 跑约 30s
+   - 看生成的 N 条最终 prompt（每条都该包含完整题目）
+   - 觉得不对可以「重新生成」或手改
+
+4. **批准并抽卡**
+   - 点「批准」（runtime 检查必须 approved 才能跑）
+   - 点「开始抽卡」
+   - 抽卡页：N 张卡片实时显示状态，点开任一张看那个 agent 的对话流
+   - 第一个 success → 胜者卡片金色高亮，其他被砍掉
+
+CLI 完全镜像同样流程：
 ```bash
-curl -fsSL https://pi.dev/install.sh | sh         # installs the pi CLI
-$EDITOR ~/.pi/agent/models.json                    # provider declarations — see docs/pi_setup.md
-cp .env.example .env && $EDITOR .env               # API keys go here, NEVER in ~/.zshrc
+multidraw save-project x.yaml && multidraw save-test t.yaml &&
+multidraw synthesize PID TID && multidraw approve PID TID &&
+multidraw run PID TID
 ```
 
-multidraw auto-loads `.env` at startup; the keys flow into multidraw and its
-pi subprocesses but never into your shell or other Claude Code instances
-running in this terminal. Full walkthrough: [`docs/pi_setup.md`](docs/pi_setup.md).
+---
 
-## Five-minute tour
+## 成功条件
 
-```bash
-# 1. solo smoke (1 agent — verifies pi + relay + multidraw all wired)
-multidraw save examples/algo_two_sum_solo.yaml
-multidraw run algo-two-sum-solo
+multidraw 沿用 agentflow 原生的四种 success_criteria：
+- `output_contains` — 输出含某字符串
+- `file_exists` / `file_contains` / `file_nonempty` — 文件类判断
 
-# 2. race (5 agents on the same problem; first to print ANSWER: wins,
-#    the other four are cancelled the moment that happens)
-multidraw save examples/algo_two_sum_race.yaml
-multidraw run algo-two-sum-race
+外加一个 multidraw 自家的：
+- `output_regex` — 正则匹配，胜者时还会用它从输出里抽干净的 payload
 
-# 3. live card grid in the browser
-multidraw serve                    # → http://127.0.0.1:8765
+racer 监听 `node_completed` 事件，命中 `node.success is True` 就触发取消策略。
 
-# 4. 实战示例：10 agent 抢做 LeetCode 48 矩阵旋转，agent 自跑代码自验
-mkdir -p challenges/lc48
-multidraw save examples/lc48_rotate_image.yaml
-multidraw run lc48-rotate-image
+---
 
-# scaffold your own project
-multidraw new -o my_project.yaml
-$EDITOR my_project.yaml
-multidraw validate my_project.yaml
-multidraw save my_project.yaml
-multidraw run my-project           # blocks until won/exhausted/cancelled
-```
+## 取消策略
 
-## Project spec at a glance
-
-```yaml
-id: ctf-pico-web1
-name: picoCTF demo - admin login bypass
-
-prompt: |
-  You are agent {{ draw_id }} ({{ model }}). Solve the task and emit
-  flag{<contents>} on a line by itself.
-  {% if strategy %}Strategy hint: {{ strategy }}{% endif %}
-  Task: ...
-
-default_success_criteria:
-  - kind: output_regex
-    value: "flag\\{[^}]+\\}"
-
-cancel_policy: immediate     # immediate | delay | none
-cancel_delay_seconds: 0
-
-concurrency: 25              # max simultaneous agents (agentflow concurrency)
-retries: 2
-timeout_seconds: 1800
-
-fleet:
-  - model: openai/gpt-5-codex
-    count: 50
-    tools: read_write
-  - model: anthropic/claude-opus-4-7:high
-    count: 5
-    tools: read_write
-    variables:
-      - { strategy: "leaked-credential dumps" }
-      - { strategy: "default-password permutations" }
-      # …one per index for this entry
-```
-
-`prompt` is a Jinja2 template rendered **once per agent at compile time**.
-Variables in scope: `model`, `index`, `count`, `draw_id`, plus anything from
-`FleetEntry.variables` (a list = one dict per index, a dict = shared).
-
-## Win conditions
-
-multidraw delegates per-node success evaluation to agentflow, which already
-ships `output_contains`, `file_exists`, `file_contains`, `file_nonempty`.
-multidraw adds `output_regex` (compiles to a contains hint for agentflow plus
-a regex extraction for the final winner payload).
-
-The race itself watches `node_completed` events and triggers on the first one
-where `node.success is True`.
-
-## Cancel policy
-
-| policy | behavior |
+| 策略 | 行为 |
 |---|---|
-| `immediate` (default) | call `orchestrator.cancel(run_id)` the moment a winner is detected |
-| `delay` | wait `cancel_delay_seconds`, then cancel — useful when you want a corroborating second winner |
-| `none` | never cancel; siblings finish naturally (more cost, possibly multiple winners) |
+| `immediate`（默认） | 一旦发现胜者，立刻 `orchestrator.cancel(run_id)` |
+| `delay` | 发现胜者后等 `cancel_delay_seconds` 秒再取消（等第二个佐证） |
+| `none` | 不取消，所有 agent 跑完为止（费 token，但可能有多个胜者） |
 
-## Web UI
+---
 
-`multidraw serve` exposes a FastAPI app on `127.0.0.1:8765`:
+## 实时观察
 
-- `/` — list of projects, modal to paste a YAML/JSON spec
-- `/projects/<id>` — project detail, fleet preview, draw history, "Start draw" button
-- `/draws/<id>` — **live card grid**: every agent is a card, status updates via SSE,
-  winner card glows gold and the rest dim out
+抽卡页里点任意一张卡 → 右侧抽屉打开，订阅 `/api/draws/<id>/agents/<agent_id>/stream`：
 
-Internally the draw page subscribes to `/api/draws/<draw_id>/stream`, which
-multiplexes agentflow's run SSE feed with a final `multidraw_draw` event
-carrying the resolved winner payload.
+- 重放该 agent 之前所有事件（`replay=true`）
+- 然后切到实时 tail 模式
+- 关闭抽屉时自动取消订阅（不会一开始就 50 路 SSE 挂在那里）
 
-## Project layout
+事件类型默认精选：`message_*` / `tool_execution_*` / `agent_start|end`。
+项目级 `verbose_stream` 开关可以放出全部 22 种 pi 事件（含 `thinking` 内部推理）。
+
+---
+
+## 项目结构
 
 ```
 multidraw/
-├── models.py        # Project / FleetEntry / DrawSummary (pydantic)
-├── store.py         # filesystem store under .multidraw/
-├── compiler.py      # Project → agentflow PipelineSpec (jinja-renders prompts)
-├── racer.py         # SSE watcher: first node_success → orchestrator.cancel
-├── runtime.py       # Project ↔ agentflow Orchestrator glue
-├── api.py           # FastAPI app (pages + JSON + SSE proxy)
-├── cli.py           # typer CLI: new / validate / save / list / run / serve
-└── web/             # Jinja templates + tiny vanilla JS / CSS for the UI
+├── models.py        # Project / Test / AgentOverride / DrawSummary
+├── store.py         # 三层 FS 存储：projects/<pid>/{spec.json, tests/<tid>/{spec.json, draws/}}
+├── compiler.py      # (Project, Test) → agentflow PipelineSpec
+├── synthesis.py     # 撰写 agent（pi/zimo gpt-5.4）
+├── agent_stream.py  # tail stdout.log + 解析 pi 事件
+├── racer.py         # SSE watcher：第一个成功的就取消其他
+├── runtime.py       # Orchestrator + RunStore 黏合层
+├── api.py           # FastAPI：4 页面 + 17 JSON 端点 + 2 SSE
+├── cli.py           # typer CLI
+├── migration.py     # v1 → v2 一次性迁移
+└── web/             # Jinja 模板 + 原生 JS / CSS（无构建步骤）
+tests/               # 81 个单元测试
+docs/                # 详细文档
 ```
 
-## Dev
+---
+
+## 开发
 
 ```bash
 source .venv/bin/activate
-pytest -q                              # unit tests (no agentflow needed for racer/store/compiler tests)
-multidraw validate examples/ctf_pico_demo.yaml
+pytest -q                       # 81 passed
+multidraw list                  # 查看本地项目
+multidraw serve                 # 启动 Web UI
 ```
 
-## Status
+---
 
-MVP. The data model and race semantics are stable; the UI is intentionally
-minimal (vanilla JS, single-file CSS). Things that exist as natural next steps
-but aren't built yet: project edit-in-place, judge-style win conditions,
-per-fleet shared scratchboard between agents, loosening
-`FleetEntry.agent` beyond `"pi"`.
+## 状态
 
-## More docs
+v0.2 — 三层模型 + 撰写 agent + 实时观察均已落地。81/81 测试通过。
 
-- 🚀 [`docs/HANDOVER.md`](docs/HANDOVER.md) — **交接文档**：项目历史、关键决策、所有坑、5 分钟接手验证流程。新接手项目先看这个。
-- 🇨🇳 [`docs/zh_使用手册.md`](docs/zh_使用手册.md) — **中文操作手册**：文件结构 + 你日常该改哪些东西。日常使用看这个。
-- [`CLAUDE.md`](CLAUDE.md) — project orientation for future Claude sessions (auto-loaded).
-- [`docs/architecture.md`](docs/architecture.md) — design rationale (why outer racer, why no fanout, etc.).
-- [`docs/pi_setup.md`](docs/pi_setup.md) — pi CLI install + `models.json` templates + smoke test.
-- [`docs/prompt_patterns.md`](docs/prompt_patterns.md) — three ways to vary prompts across the fleet (same / per-agent variable / per-entry override).
+下一步可选优化：
+- 放开 `FleetEntry.agent` 支持 codex / claude（目前锁定 pi）
+- judge 类 win condition（LLM 判官）
+- Test 编辑（目前只能新建+删除）
 
-## Acknowledgements
+---
 
-This is a thin layer; all the heavy lifting (DAG runtime, retries, traces,
-concurrency, SSE plumbing, Pi multi-provider model routing) belongs to
-[agentflow](https://github.com/berabuddies/agentflow).
+## 文档
+
+| 文档 | 看什么 |
+|---|---|
+| [`QUICKSTART.md`](QUICKSTART.md) | 5 分钟跑起来 |
+| [`docs/Windows快速上手.md`](docs/Windows快速上手.md) | Windows 详细步骤 |
+| [`docs/HANDOVER.md`](docs/HANDOVER.md) | **交接文档**：架构 + 历史 + 已知坑 + 5 分钟健康检查 |
+| [`docs/重构_v2_项目-测试-抽卡分层.md`](docs/重构_v2_项目-测试-抽卡分层.md) | v2 三层模型设计文档 |
+| [`docs/zh_使用手册.md`](docs/zh_使用手册.md) | 日常操作手册 |
+| [`docs/architecture.md`](docs/architecture.md) | race semantics 设计原理 |
+| [`docs/pi_setup.md`](docs/pi_setup.md) | pi CLI + 多 provider 配置 |
+| [`CLAUDE.md`](CLAUDE.md) | 给未来 Claude session 的简版 orientation（自动加载） |
+
+---
+
+## 致谢
+
+multidraw 只是一层薄壳；DAG 运行时、重试、追踪、并发、SSE、pi 的多 provider 路由——
+这些都来自 [agentflow](https://github.com/berabuddies/agentflow)。
